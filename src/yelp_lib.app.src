@@ -5,9 +5,15 @@
   {mod, { yelp_lib_app, []}},
   {applications,
    [kernel,
-    stdlib
+    stdlib,
+    crypto,
+    hackney
    ]},
-  {env,[]},
+  {env,[{consumer_key, "your_consumer_key"}
+       ,{consumer_secret, "your_consumer_secret"}
+       ,{token, "your_token"}
+       ,{token_secret, "your_token_secret"}
+       ]},
   {modules, []},
 
   {maintainers, []},
