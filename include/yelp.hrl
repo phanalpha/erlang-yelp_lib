@@ -12,6 +12,17 @@
 		    , longitude	:: float()
 		    }).
 
+-record(bounds, { sw	:: #coordinate{}
+		, ne	:: #coordinate{}
+		}).
+
+-record(geographic_coordinate, { latitude   :: float()
+			       , longitude  :: float()
+			       , accuracy   :: float() | undefined
+			       , altitude   :: float() | undefined
+			       , altitude_accuracy  :: float() | undefined
+			       }).
+
 -record(region, { span		:: #coordinate{}
 		, center	:: #coordinate{}
 		}).

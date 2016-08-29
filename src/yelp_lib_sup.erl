@@ -30,7 +30,7 @@ start_link(#oauth_consumer{} = Consumer) ->
 
 %% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
 init([#oauth_consumer{} = Consumer]) ->
-    {ok, { {one_for_all, 0, 1}
+    {ok, { {one_for_all, 1000, 1}
 	 , [#{ id => yelp_lib
 	     , start => {yelp_lib, start_link, [Consumer]}
 	     }]

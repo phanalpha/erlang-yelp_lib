@@ -19,6 +19,30 @@
 -define(YELP_SEARCH, "https://api.yelp.com/v2/search").
 -define(NR_RAND_BYTES, 21).
 
+-type sort() :: best_matched			% 0
+	      | distance			% 1
+	      | highest_rated.			% 2
+
+-type location() :: { location, string() }
+		  | #coordinate{}
+		  | #bounds{}
+		  | #geographic_coordinate{}.
+
+-type iso_3166_1_alpha_2() :: string().		% country code
+-type iso_639() :: string().			% language code
+-type search_term() :: string().
+-type search_param() :: search_term()
+		      | { limit, integer() }
+		      | { offset, integer() }
+		      | sort()
+		      | { category, [string()] }
+		      | location()
+		      | { radius, integer() }
+		      | deals
+		      | { country, iso_3166_1_alpha_2() }
+		      | { language, iso_639() }
+		      | actionlinks.
+
 %% ============================================================
 %% API
 %% ============================================================
@@ -30,6 +54,7 @@ start() ->
 start_link(#oauth_consumer{} = Consumer) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [Consumer], []).
 
+-spec search([search_param()]) -> {ok, #search_response{}} | {error, term()}.
 search(Parameters) ->
     gen_server:call(?SERVER, {search, Parameters}).
 
@@ -62,7 +87,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% ============================================================
 
 search(Parameters, OAuthConsumer) ->
-    Parameters2 = sign("GET", ?YELP_SEARCH, Parameters, OAuthConsumer),
+    Parameters2 = sign("GET", ?YELP_SEARCH, lists:map(fun regularize/1, Parameters), OAuthConsumer),
     case hackney:get( hackney_url:make_url(?YELP_SEARCH, [], Parameters2) ) of
 	{ok, StatusCode, Headers, ClientRef} ->
 	    {ok, Body2} = hackney:body(ClientRef),
@@ -74,6 +99,52 @@ search(Parameters, OAuthConsumer) ->
 	{error, _Reason} = Error ->
 	    Error
     end.
+
+-spec regularize(search_param()) -> {string(), string()}.
+regularize({limit, Limit}) ->
+    {"limit", integer_to_list(Limit)};
+regularize({offset, Offset}) ->
+    {"offset", integer_to_list(Offset)};
+regularize(best_matched) ->
+    {"sort", "0"};
+regularize(distance) ->
+    {"sort", "1"};
+regularize(highest_rated) ->
+    {"sort", "2"};
+regularize({category, Categories}) ->
+    {"category_filter", lists:flatten( lists:join(",", Categories) )};
+regularize({location, Location}) ->
+    {"location", Location};
+regularize(#coordinate{latitude = Latitude, longitude = Longitude}) ->
+    {"cll", lists:flatten( io_lib:format("~f,~f", [Latitude, Longitude]) )};
+regularize(#bounds{sw = #coordinate{ latitude = Lat0, longitude = Lng0 }
+		  ,ne = #coordinate{ latitude = Lat1, longitude = Lng1 }}) ->
+    {"bounds", lists:flatten( io_lib:format("~f,~f|~f,~f", [Lat0, Lng0, Lat1, Lng1]) )};
+regularize(#geographic_coordinate{latitude = Latitude
+				 ,longitude = Longitude
+				 ,accuracy = Accuracy
+				 ,altitude = Altitude
+				 ,altitude_accuracy = AltitudeAccuracy
+				 }) ->
+    Es = [ if E =/= undefined ->
+		   io_lib:format("~f", [E]);
+	      true ->
+		   ""
+	   end ||
+	     E <- [Latitude, Longitude, Accuracy, Altitude, AltitudeAccuracy] ],
+    {"ll", lists:flatten( lists:join(",", Es) )};
+regularize({radius, Radius}) ->
+    {"radius_filter", integer_to_list(Radius)};
+regularize(deals) ->
+    {"deals_filter", "true"};
+regularize({ country, Country }) ->
+    {"cc", Country};
+regularize({ language, Language }) ->
+    {"lang", Language};
+regularize(actionlinks) ->
+    {"actionlinks", "true"};
+regularize(Term) ->
+    {"term", Term}.
 
 cook(#{<<"latitude">> := Latitude
       ,<<"longitude">> := Longitude}) ->
@@ -138,7 +209,8 @@ cook(#{<<"id">> := Id
 	     , rating_img_url_large = RatingImgURLLarge
 	     , snippet_text = SnippetText
 	     , snippet_image_url = SnippetImageURL
-	     , location = cook( maps:merge(#{<<"cross_streets">> => undefined
+	     , location = cook( maps:merge(#{<<"postal_code">> => undefined
+					    ,<<"cross_streets">> => undefined
 					    ,<<"neighborhoods">> => undefined
 					    }, Location) )
 	     };
